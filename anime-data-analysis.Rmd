@@ -1,0 +1,754 @@
+---
+title: "Anime Data Analysis"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data
+
+[Source](https://www.kaggle.com/datasets/andreuvallhernndez/myanimelist)
+
+```{r, message=FALSE}
+library(tidymodels)
+library(patchwork)
+
+anime_raw <- read_csv("data/anime.csv")
+manga_raw <- read_csv("data/manga.csv")
+```
+
+# Ideas
+
+Interesting
+
+- Ratings of animes over time
+- Predict genre using NLP
+- broadcast_time / broadcast_day vs. score
+- Connect anime + manga
+- Use related animes to predict new ones (usually a good indicator)
+- Incorporate number of members/favorites before
+- Maybe add tiers for producers
+- Account for missing / incorrect parameters in the mean score function
+- Remove title in recipe instead
+
+Broad Goals
+
+- Finish all the models
+- Rshiny App
+- Find a way to access to MAL API
+
+**Goal:** predict anime scores
+
+**Remove:** anime_id (adds nothing), title (adds nothing), start_date (can use start season), end_date (doesn't really matter), total_duration (avg times number of episodes - nvm doesn't really matter), approved (?), created_at (adds nothing), updated_at (adds nothing), real_start_date (can use start season), real_end_date (doesn't really matter), synopsis (not doing NLP), background (doesn't matter), main_picture (doesn't matter), url (doesn't matter), trailer_url (doesn't matter), title_english (doesn't matter), title_japanese (doesn't matter), title_symptoms (doesn't matter), sfw (use rating instead), episode_duration (largely taken care of by genre), licensors (may not be available at times), broadcast_time (too hard), broadcast_day (lot of missing values), start_year (doesn't make sense for next few years)
+
+Keep: score, type, episodes, source, members, favorites, rating, genres, themes, demographics, studios, producers
+
+# Exploratory Data Analysis {.tabset}
+
+```{r}
+anime <- anime_raw %>%
+  # filter out any animes that do not have scores
+  drop_na(score) %>%
+  # keep only animes that have finished airing (since scores tend to fluctuate during the season)
+  filter(status == "finished_airing") %>%
+  # select relevant variables (title is not a predictor but is kept here for visualization purposes)
+  select(title, score, type, episodes, source, members, favorites, rating, 
+         genres, themes, demographics, studios, producers) %>%
+  # filter out rows that have NA values
+  drop_na()
+```
+
+## Scores
+
+```{r}
+p1 <- anime %>%
+  ggplot(aes(x = score)) +
+  geom_histogram() +
+  labs(title = "Histogram of Scores")
+
+p2 <- anime %>%
+  ggplot(aes(x = score)) +
+  geom_boxplot(outlier.color = "red") +
+  labs(title = "Boxplot of Scores")
+
+p1 + p2 + plot_layout(ncol = 1)
+```
+
+## Type
+
+```{r}
+anime %>%
+  group_by(type) %>%
+  summarise(score = mean(score)) %>%
+  
+  arrange(desc(score)) %>%
+  mutate(type = fct_inorder(type)) %>%
+  
+  ggplot(aes(x = type, y = score)) +
+  geom_bar(stat = "identity")
+```
+
+## Episodes
+
+```{r}
+library(ggrepel)
+anime %>%
+  ggplot(aes(x = episodes, y = score)) +
+  geom_point() +
+  geom_text_repel(data = subset(anime, episodes > 550),
+                  aes(label = title),
+                  box.padding = 1)
+```
+
+## Source
+
+```{r}
+anime %>%
+  group_by(source) %>%
+  summarise(score = mean(score)) %>%
+  
+  arrange(desc(score)) %>%
+  mutate(source = fct_inorder(source)) %>%
+  
+  ggplot(aes(x = source, y = score)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+## Members
+
+```{r}
+anime %>%
+  ggplot(aes(x = members, y = score)) +
+  geom_point() +
+  geom_text_repel(data = subset(anime, members > 2.7e6),
+                  aes(label = title),
+                  box.padding = 0.7)
+```
+
+## Favorites
+
+```{r}
+anime %>%
+  ggplot(aes(x = favorites, y = score)) +
+  geom_point() +
+  geom_text_repel(data = subset(anime, favorites > 1.5e5),
+                  aes(label = title),
+                  box.padding = 0.5)
+```
+
+## Rating
+
+```{r}
+anime %>%
+  group_by(rating) %>%
+  summarise(score = mean(score)) %>%
+  
+  arrange(desc(score)) %>%
+  mutate(rating = fct_inorder(rating)) %>%
+  
+  ggplot(aes(x = rating, y = score)) +
+  geom_bar(stat = "identity")
+```
+
+## Genres
+
+```{r}
+# helper function
+replace_empty_string <- function(.str) {
+  ifelse(.str == "", "Other or NA", .str)
+}
+```
+
+taken from [here](https://github.com/rfordatascience/tidytuesday/tree/master/data/2019/2019-04-23)
+
+```{r}
+anime %>%
+  mutate(genres = str_remove(genres, "\\["),
+         genres = str_remove(genres, "\\]")) %>% 
+  separate_rows(genres, sep = ",") %>% 
+  mutate(genres = str_remove(genres, "\\'"),
+         genres = str_remove(genres, "\\'"),
+         genres = str_trim(genres)) %>%
+  mutate_at("genres", ~ replace_empty_string(.x)) %>%
+  group_by(genres) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+```
+
+```{r}
+anime %>%
+  mutate(genres = str_remove(genres, "\\["),
+         genres = str_remove(genres, "\\]")) %>% 
+  separate_rows(genres, sep = ",") %>% 
+  mutate(genres = str_remove(genres, "\\'"),
+         genres = str_remove(genres, "\\'"),
+         genres = str_trim(genres)) %>%
+  mutate_at("genres", ~ replace_empty_string(.x)) %>%
+  ggplot(aes(x = genres, y = score, color = genres)) +
+  geom_boxplot() +
+  geom_hline(aes(yintercept = mean(score)),
+             linetype = "dashed") +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+```
+
+## Themes
+
+```{r}
+anime %>%
+  mutate(themes = str_remove(themes, "\\["),
+         themes = str_remove(themes, "\\]")) %>% 
+  separate_rows(themes, sep = ",") %>% 
+  mutate(themes = str_remove(themes, "\\'"),
+         themes = str_remove(themes, "\\'"),
+         themes = str_trim(themes)) %>%
+  mutate_at("themes", ~ replace_empty_string(.x)) %>%
+  group_by(themes) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+```
+
+## Demographics
+
+```{r}
+anime %>%
+  mutate(demographics = str_remove(demographics, "\\["),
+         demographics = str_remove(demographics, "\\]")) %>% 
+  separate_rows(demographics, sep = ",") %>% 
+  mutate(demographics = str_remove(demographics, "\\'"),
+         demographics = str_remove(demographics, "\\'"),
+         demographics = str_trim(demographics)) %>%
+  mutate_at("demographics", ~ replace_empty_string(.x)) %>%
+  group_by(demographics) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+```
+
+## Studios
+
+```{r}
+anime %>%
+  mutate(studios = str_remove(studios, "\\["),
+         studios = str_remove(studios, "\\]")) %>% 
+  separate_rows(studios, sep = ",") %>% 
+  mutate(studios = str_remove(studios, "\\'"),
+         studios = str_remove(studios, "\\'"),
+         studios = str_trim(studios)) %>%
+  mutate_at("studios", ~ replace_empty_string(.x)) %>%
+  group_by(studios) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+```
+
+## Producers
+
+```{r}
+anime %>%
+  mutate(producers = str_remove(producers, "\\["),
+         producers = str_remove(producers, "\\]")) %>% 
+  separate_rows(producers, sep = ",") %>% 
+  mutate(producers = str_remove(producers, "\\'"),
+         producers = str_remove(producers, "\\'"),
+         producers = str_trim(producers)) %>%
+  mutate_at("producers", ~ replace_empty_string(.x)) %>%
+  group_by(producers) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+```
+
+# More Cleaning {.tabset}
+
+## Genres
+
+```{r}
+genres_mean_scores <- anime %>%
+  mutate(genres = str_remove(genres, "\\["),
+         genres = str_remove(genres, "\\]")) %>% 
+  separate_rows(genres, sep = ",") %>% 
+  mutate(genres = str_remove(genres, "\\'"),
+         genres = str_remove(genres, "\\'"),
+         genres = str_trim(genres)) %>%
+  mutate_at("genres", ~ replace_empty_string(.x)) %>%
+  group_by(genres) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+
+genres_mean_scores
+```
+
+## Themes
+
+```{r}
+themes_mean_scores <- anime %>%
+  mutate(themes = str_remove(themes, "\\["),
+         themes = str_remove(themes, "\\]")) %>% 
+  separate_rows(themes, sep = ",") %>% 
+  mutate(themes = str_remove(themes, "\\'"),
+         themes = str_remove(themes, "\\'"),
+         themes = str_trim(themes)) %>%
+  mutate_at("themes", ~ replace_empty_string(.x)) %>%
+  group_by(themes) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+
+themes_mean_scores
+```
+
+## Studios
+
+```{r}
+studios_mean_scores <- anime %>%
+  mutate(studios = str_remove(studios, "\\["),
+         studios = str_remove(studios, "\\]")) %>% 
+  separate_rows(studios, sep = ",") %>% 
+  mutate(studios = str_remove(studios, "\\'"),
+         studios = str_remove(studios, "\\'"),
+         studios = str_trim(studios)) %>%
+  mutate_at("studios", ~ replace_empty_string(.x)) %>%
+  group_by(studios) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+
+studios_mean_scores
+```
+
+## Demographics
+
+```{r}
+demographics_mean_scores <- anime %>%
+  mutate(demographics = str_remove(demographics, "\\["),
+         demographics = str_remove(demographics, "\\]")) %>% 
+  separate_rows(demographics, sep = ",") %>% 
+  mutate(demographics = str_remove(demographics, "\\'"),
+         demographics = str_remove(demographics, "\\'"),
+         demographics = str_trim(demographics)) %>%
+  mutate_at("demographics", ~ replace_empty_string(.x)) %>%
+  group_by(demographics) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+
+demographics_mean_scores
+```
+
+## Producers
+
+```{r}
+producers_mean_scores <- anime %>%
+  mutate(producers = str_remove(producers, "\\["),
+         producers = str_remove(producers, "\\]")) %>% 
+  separate_rows(producers, sep = ",") %>% 
+  mutate(producers = str_remove(producers, "\\'"),
+         producers = str_remove(producers, "\\'"),
+         producers = str_trim(producers)) %>%
+  mutate_at("producers", ~ replace_empty_string(.x)) %>%
+  group_by(producers) %>%
+  summarise(score = mean(score)) %>%
+  arrange(desc(score))
+
+producers_mean_scores
+```
+
+# Calculate Scores
+
+```{r}
+total_mean_score <- anime %>% 
+  pull(score) %>% 
+  mean()
+
+# categories = ['category1', 'category2']
+category_mean_score <- function(categories, df_map, replace_empty = total_mean_score) {
+  # get mapped values
+  category <- df_map %>% pull(1)
+  score <- df_map %>% pull(2)
+  
+  # use mean score over all animes if input is empty
+  if (categories == "[]") {
+    return (replace_empty)
+  }
+  
+  # otherwise, calculate the mean score over those categories
+  else {
+    mean_score <- categories %>%
+      str_remove("\\[") %>%
+      str_remove("\\]") %>%
+      str_remove_all("\\'") %>%
+      
+      strsplit(split = ", ") %>%
+      unlist() %>%
+      plyr::mapvalues(from = category, 
+                      to = score,
+                      warn_missing = FALSE) %>%
+      as.numeric() %>%
+      mean()
+    
+    return(mean_score)
+  }
+}
+```
+
+```{r}
+anime_data <- anime %>%
+  mutate(genres_score = map_dbl(genres, ~ category_mean_score(.x, genres_mean_scores)),
+         themes_score = map_dbl(themes, ~ category_mean_score(.x, themes_mean_scores)),
+         studios_score = map_dbl(studios, ~ category_mean_score(.x, studios_mean_scores)),
+         demographics_score = map_dbl(demographics, ~ category_mean_score(.x, demographics_mean_scores)),
+         producers_score = map_dbl(producers, ~ category_mean_score(.x, producers_mean_scores))) %>%
+  select(-c(genres, themes, studios, demographics, producers, title)) %>%
+  mutate_if(is.character, factor)
+
+save(anime_data, file = "data/anime_data.RData")
+```
+
+# Models
+
+```{r, message=FALSE}
+library(tidymodels)
+load("data/anime_data.RData")
+tidymodels_prefer()
+
+set.seed(1)
+anime_split <- initial_split(anime_data, strata = "score")
+anime_train <- training(anime_split)
+anime_test <- testing(anime_split)
+```
+
+Consider creating a [custom step](https://www.tidymodels.org/learn/develop/recipes/#create-the-prep-method) for the recipe.
+
+## Linear Model
+
+```{r}
+anime_recipe <- recipe(score ~ ., data = anime_train) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_scale(all_numeric_predictors())
+
+set.seed(1)
+anime_folds <- vfold_cv(anime_train, v = 5)
+```
+
+```{r}
+lm_model <- linear_reg() %>%
+  set_mode("regression") %>%
+  set_engine("lm")
+
+lm_workflow <- workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(anime_recipe)
+
+lm_fit <- lm_workflow %>%
+  fit(anime_train)
+
+augment(lm_fit, new_data = anime_test) %>% 
+  mutate(avg_error = .pred - score) %>% 
+  ggplot(aes(x = avg_error)) +
+  geom_histogram()
+
+augment(lm_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red")
+
+augment(lm_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+save(lm_fit, file = "models/lm_fit.rda")
+```
+
+```{r}
+library(corrplot)
+anime_train %>%
+  select_if(is.numeric) %>%
+  cor()
+```
+
+Nearest Neighbor
+
+```{r}
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("regression") %>%
+  set_engine("kknn")
+
+knn_workflow <- workflow() %>%
+  add_model(knn_model) %>%
+  add_recipe(anime_recipe)
+
+neighbors_grid <- grid_regular(neighbors(range = c(10, 100)),
+                               levels = 10)
+
+tune_res <- tune_grid(knn_workflow,
+                      resamples = anime_folds,
+                      grid = neighbors_grid)
+
+autoplot(tune_res)
+```
+
+```{r}
+best_neighbors <- select_best(tune_res, metric = "rmse")
+
+knn_final <- finalize_workflow(knn_workflow, best_neighbors)
+
+knn_final_fit <- knn_final %>% 
+  fit(anime_train)
+
+augment(knn_final_fit, new_data = anime_test) %>% 
+  mutate(avg_error = .pred - score) %>% 
+  ggplot(aes(x = avg_error)) +
+  geom_histogram()
+
+augment(knn_final_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red")
+
+augment(knn_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+save(knn_final_fit, file = "models/knn_fit.rda")
+```
+
+Boosted Model (doesn't work)
+
+```{r}
+# https://juliasilge.com/blog/xgboost-tune-volleyball/
+boost_model <- boost_tree(min_n = tune(),
+                          mtry = tune(),
+                          learn_rate = tune(),
+                          tree_depth = tune(),
+                          sample_size = tune(),
+                          loss_reduction = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("regression")
+
+boost_workflow <- workflow() %>%
+  add_model(boost_model) %>%
+  add_recipe(anime_recipe)
+
+# cover hyperspace as much as possible
+boost_grid <- grid_latin_hypercube(min_n(),
+                                   finalize(mtry(), anime_train),
+                                   learn_rate(),
+                                   tree_depth(),
+                                   sample_size = sample_prop(),
+                                   loss_reduction(),
+                                   size = 50)
+
+tune_res <- tune_grid(boost_workflow,
+                      resamples = anime_folds,
+                      grid = boost_grid)
+
+autoplot(tune_res, metric = "rmse")
+```
+
+```{r}
+best_params <- select_best(tune_res, "rmse")
+
+final_boost <- finalize_workflow(boost_workflow, best_params)
+
+final_boost_fit <- final_boost %>% 
+  fit(anime_train)
+
+augment(final_boost_fit, new_data = anime_test) %>% 
+  mutate(avg_error = .pred - score) %>% 
+  ggplot(aes(x = avg_error)) +
+  geom_histogram()
+
+augment(final_boost_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red")
+
+augment(final_boost_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+# not predicting above a certain point
+predict(final_boost_fit, new_data = anime_test) %>% 
+  pull(.pred) %>% 
+  summary()
+```
+
+Random Forest
+
+```{r}
+rf_model <- rand_forest() %>%
+  set_mode("regression") %>%
+  set_engine("ranger")
+
+rf_workflow <- workflow() %>%
+  add_model(rf_model) %>%
+  add_recipe(anime_recipe)
+
+rf_fit <- rf_workflow %>%
+  fit(anime_train)
+
+augment(rf_fit, anime_test) %>%
+  mutate(avg_error = .pred - score) %>% 
+  ggplot(aes(x = avg_error)) +
+  geom_histogram()
+
+# spy family
+predict(rf_fit,
+        new_data = tibble(type = "tv",
+                       episodes = 13,
+                       source = "manga",
+                       members = 588168,
+                       favorites = 5559,
+                       rating = "pg_13",
+                       genres_score = 6.718383,
+                       themes_score = 7.608718,
+                       studios_score = 7.256266,
+                       demographics_score = 7.07873,
+                       producers_score = 7.254288))
+
+# chainsaw man
+predict(rf_fit,
+        new_data = tibble(type = "tv",
+                       episodes = 12,
+                       source = "manga",
+                       members = 966715,
+                       favorites = 31151,
+                       rating = "r",
+                       genres_score = category_mean_score("['Action', 'Fantasy']", genres_mean_scores),
+                       themes_score = category_mean_score("['Gore']", themes_mean_scores),
+                       studios_score = category_mean_score("['MAPPA']", studios_mean_scores),
+                       demographics_score = category_mean_score("['Shounen']", demographics_mean_scores),
+                       producers_score = category_mean_score("['Other or NA']", producers_mean_scores)))
+
+# suzume
+predict(rf_fit,
+        new_data = tibble(type = "movie",
+                       episodes = 1,
+                       source = "original",
+                       members = 108909,
+                       favorites = 1006,
+                       rating = "pg_13",
+                       genres_score = category_mean_score("['Fantasy']", genres_mean_scores),
+                       themes_score = category_mean_score("['Other or NA']", themes_mean_scores),
+                       studios_score = category_mean_score("['CoMix Wave Films']", studios_mean_scores),
+                       demographics_score = category_mean_score("[]", demographics_mean_scores),
+                       producers_score = category_mean_score("['STORY']", producers_mean_scores)))
+```
+
+```{r}
+set.seed(1)
+small_train <- anime_train[1:500, ]
+anime_folds <- vfold_cv(small_train)
+
+rf_spec_new <- rand_forest(mtry = tune(),
+                           trees = 1000) %>%
+  set_engine("ranger") %>%
+  set_mode("regression")
+
+rf_rec <- recipe(score ~ ., data = small_train)
+
+rf_workflow <- workflow() %>%
+  add_recipe(rf_rec) %>%
+  add_model(rf_spec_new)
+
+param_grid <- grid_regular(mtry(range = c(2, 5)),
+                           levels = 4)
+
+tune_res <- tune_grid(rf_workflow,
+                      resamples = anime_folds,
+                      grid = param_grid)
+
+autoplot(tune_res)
+```
+
+```{r}
+best <- select_best(tune_res)
+rf_final <- finalize_workflow(rf_workflow, best)
+
+rf_final_fit <- rf_final %>% fit(small_train)
+
+augment(rf_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+```
+
+- Random forest
+
+Test PC regression
+
+```{r}
+# specify recipe
+pca_recipe <- recipe(score ~ ., data = anime_train) %>%
+  step_novel(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_predictors()) %>%
+  step_normalize(all_predictors()) %>%
+  step_pca(all_predictors(), threshold = tune())
+
+# create workflow object
+pca_workflow <- workflow() %>%
+  add_recipe(pca_recipe) %>%
+  add_model(lm_model)
+
+# threshold values to try
+threshold_grid <- grid_regular(threshold(), levels = 10)
+
+# fit model for each threshold
+tune_res <- tune_grid(object = pca_workflow,
+                      resamples = anime_folds,
+                      grid = threshold_grid)
+
+# plot metrics
+autoplot(tune_res)
+```
+
+```{r}
+# select the best model based on the given metric
+best_threshold <- select_best(tune_res, metric = "rmse")
+
+# refit using the whole training data set
+pca_final <- finalize_workflow(pca_workflow, best_threshold)
+pca_final_fit <- fit(pca_final, data = anime_train)
+
+augment(pca_final_fit, new_data = anime_test) %>% 
+  mutate(avg_error = .pred - score) %>% 
+  ggplot(aes(x = avg_error)) +
+  geom_histogram()
+
+augment(pca_final_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red")
+
+augment(pca_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+```
+
+```{r}
+# chainsaw man
+predict(pca_final_fit,
+        new_data = tibble(type = "tv",
+                       episodes = 12,
+                       source = "manga",
+                       members = 966715,
+                       favorites = 31151,
+                       rating = "r",
+                       genres_score = category_mean_score("['Action', 'Fantasy']", genres_mean_scores),
+                       themes_score = category_mean_score("['Gore']", themes_mean_scores),
+                       studios_score = category_mean_score("['MAPPA']", studios_mean_scores),
+                       demographics_score = category_mean_score("['Shounen']", demographics_mean_scores),
+                       producers_score = category_mean_score("['Other or NA']", producers_mean_scores)))
+
+# spy family
+predict(lm_fit,
+        new_data = tibble(type = "tv",
+                       episodes = 13,
+                       source = "manga",
+                       members = 588168,
+                       favorites = 5559,
+                       rating = "pg_13",
+                       genres_score = 6.718383,
+                       themes_score = 7.608718,
+                       studios_score = 7.256266,
+                       demographics_score = 7.07873,
+                       producers_score = 7.254288))
+```
+
+

@@ -1,0 +1,112 @@
+---
+title: "deleted drafts"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(tidyverse)
+
+anime_raw <- read_csv("data/anime.csv")
+manga_raw <- read_csv("data/manga.csv")
+```
+
+```{r}
+anime_raw %>%
+  drop_na(type, score) %>%
+  group_by(type) %>%
+  summarise(score = mean(score)) %>%
+  ggplot(aes(x = type, y = score)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+```
+
+```{r}
+anime_raw %>%
+  ggplot(aes(x = scored_by, y = score)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+anime_raw %>%
+  filter(status == "finished_airing") %>%
+  drop_na(start_year, start_season) %>%
+  mutate(start_season = factor(start_season,
+                               levels = c("winter", "spring", "summer", "fall"))) %>%
+  arrange(start_year, match(start_season, levels(start_season))) %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  mutate(start_air = fct_inorder(start_air)) %>%
+  group_by(start_air) %>%
+  summarise(count = n())
+```
+
+```{r}
+anime_raw %>%
+  filter(status == "finished_airing") %>%
+  filter(type != "music") %>%
+  drop_na(start_year, start_season) %>%
+  mutate(start_season = factor(start_season,
+                               levels = c("winter", "spring", "summer", "fall"))) %>%
+  arrange(start_year, match(start_season, levels(start_season))) %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  mutate(start_air = fct_inorder(start_air)) %>%
+  drop_na(score) %>%
+  group_by(start_air) %>%
+  summarise(score = mean(score))
+```
+
+```{r}
+anime_raw %>%
+  drop_na(start_year, start_season) %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  group_by(start_air) %>%
+  summarise(count = n())
+```
+
+```{r}
+anime_raw %>%
+  drop_na(start_year, start_season) %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  group_by(start_air) %>%
+  drop_na(score) %>%
+  summarise(score = mean(score)) %>%
+  ggplot(aes(x = start_air, y = score)) +
+    geom_bar(stat = "identity")
+```
+
+```{r}
+anime_raw %>%
+  group_by(start_year, start_season) %>%
+  summarise(score = mean(score)) %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  ggplot(aes(start_air, score)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+anime_raw %>%
+  filter(start_year > 2015) %>%
+  drop_na() %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  ggplot(aes(start_air, score)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2) +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+anime_raw %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  count(start_air)
+```
+
+```{r}
+anime_raw %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  filter(start_air == "2022_winter")
+```
