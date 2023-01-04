@@ -15,8 +15,10 @@ knitr::opts_chunk$set(echo = TRUE)
 [Source](https://www.kaggle.com/datasets/andreuvallhernndez/myanimelist)
 
 ```{r, message=FALSE}
+library(tidyverse)
 library(tidymodels)
 library(patchwork)
+library(ggrepel)
 
 anime_raw <- read_csv("data/anime.csv")
 manga_raw <- read_csv("data/manga.csv")
@@ -96,7 +98,6 @@ anime %>%
 ## Episodes
 
 ```{r}
-library(ggrepel)
 anime %>%
   ggplot(aes(x = episodes, y = score)) +
   geom_point() +
@@ -456,14 +457,19 @@ augment(lm_fit, new_data = anime_test) %>%
 augment(lm_fit, new_data = anime_test) %>%
   rmse(truth = score, estimate = .pred)
 
+predict(lm_fit, new_data = anime_test) %>% 
+  pull(.pred) %>% 
+  summary()
+
 save(lm_fit, file = "models/lm_fit.rda")
 ```
 
 ```{r}
-library(corrplot)
-anime_train %>%
-  select_if(is.numeric) %>%
-  cor()
+augment(lm_fit, new_data = anime_test) %>%
+  mutate(err = .pred - score) %>%
+  pull(err) %>%
+  abs() %>%
+  summary()
 ```
 
 Nearest Neighbor
@@ -511,11 +517,12 @@ augment(knn_final_fit, new_data = anime_test) %>%
 save(knn_final_fit, file = "models/knn_fit.rda")
 ```
 
-Boosted Model (doesn't work)
+Boosted Model
 
 ```{r}
 # https://juliasilge.com/blog/xgboost-tune-volleyball/
-boost_model <- boost_tree(min_n = tune(),
+boost_model <- boost_tree(trees = 1000,
+                          min_n = tune(),
                           mtry = tune(),
                           learn_rate = tune(),
                           tree_depth = tune(),
@@ -528,7 +535,7 @@ boost_workflow <- workflow() %>%
   add_model(boost_model) %>%
   add_recipe(anime_recipe)
 
-# cover hyperspace as much as possible
+# cover hyperparameter space as much as possible
 boost_grid <- grid_latin_hypercube(min_n(),
                                    finalize(mtry(), anime_train),
                                    learn_rate(),
@@ -574,6 +581,52 @@ predict(final_boost_fit, new_data = anime_test) %>%
 Random Forest
 
 ```{r}
+rf_model <- rand_forest(mtry = tune(),
+                        trees = 1000,
+                        min_n = tune()) %>%
+  set_mode("regression") %>%
+  set_engine("ranger")
+
+rf_workflow <- workflow() %>%
+  add_model(rf_model) %>%
+  add_recipe(anime_recipe)
+
+tune_res <- tune_grid(rf_workflow,
+                      resamples = anime_folds,
+                      grid = 20)
+
+autoplot(tune_res)
+```
+
+```{r}
+best_params <- select_best(tune_res, "rmse")
+
+rf_final <- finalize_workflow(rf_workflow, best_params)
+
+rf_fit <- rf_final %>%
+  fit(anime_train)
+
+augment(rf_fit, new_data = anime_test) %>% 
+  mutate(avg_error = .pred - score) %>% 
+  ggplot(aes(x = avg_error)) +
+  geom_histogram()
+
+augment(rf_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red")
+
+augment(rf_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+predict(rf_fit, new_data = anime_test) %>% 
+  pull(.pred) %>% 
+  summary()
+
+save(rf_fit, file = "models/rf_fit.rda")
+```
+
+```{r}
 rf_model <- rand_forest() %>%
   set_mode("regression") %>%
   set_engine("ranger")
@@ -589,20 +642,22 @@ augment(rf_fit, anime_test) %>%
   mutate(avg_error = .pred - score) %>% 
   ggplot(aes(x = avg_error)) +
   geom_histogram()
+```
 
+```{r}
 # spy family
-predict(rf_fit,
+predict(lm_fit,
         new_data = tibble(type = "tv",
-                       episodes = 13,
-                       source = "manga",
-                       members = 588168,
-                       favorites = 5559,
-                       rating = "pg_13",
-                       genres_score = 6.718383,
-                       themes_score = 7.608718,
-                       studios_score = 7.256266,
-                       demographics_score = 7.07873,
-                       producers_score = 7.254288))
+                          episodes = 13,
+                          source = "manga",
+                          members = 588168,
+                          favorites = 5559,
+                          rating = "pg_13",
+                          genres_score = 6.718383,
+                          themes_score = 7.608718,
+                          studios_score = 7.256266,
+                          demographics_score = 7.07873,
+                          producers_score = 7.254288))
 
 # chainsaw man
 predict(rf_fit,
@@ -633,45 +688,7 @@ predict(rf_fit,
                        producers_score = category_mean_score("['STORY']", producers_mean_scores)))
 ```
 
-```{r}
-set.seed(1)
-small_train <- anime_train[1:500, ]
-anime_folds <- vfold_cv(small_train)
-
-rf_spec_new <- rand_forest(mtry = tune(),
-                           trees = 1000) %>%
-  set_engine("ranger") %>%
-  set_mode("regression")
-
-rf_rec <- recipe(score ~ ., data = small_train)
-
-rf_workflow <- workflow() %>%
-  add_recipe(rf_rec) %>%
-  add_model(rf_spec_new)
-
-param_grid <- grid_regular(mtry(range = c(2, 5)),
-                           levels = 4)
-
-tune_res <- tune_grid(rf_workflow,
-                      resamples = anime_folds,
-                      grid = param_grid)
-
-autoplot(tune_res)
-```
-
-```{r}
-best <- select_best(tune_res)
-rf_final <- finalize_workflow(rf_workflow, best)
-
-rf_final_fit <- rf_final %>% fit(small_train)
-
-augment(rf_final_fit, new_data = anime_test) %>%
-  rmse(truth = score, estimate = .pred)
-```
-
-- Random forest
-
-Test PC regression
+PC Linear Regression
 
 ```{r}
 # specify recipe
@@ -679,8 +696,8 @@ pca_recipe <- recipe(score ~ ., data = anime_train) %>%
   step_novel(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors()) %>%
   step_zv(all_predictors()) %>%
-  step_normalize(all_predictors()) %>%
-  step_pca(all_predictors(), threshold = tune())
+  step_normalize(all_numeric_predictors()) %>%
+  step_pca(all_numeric_predictors(), threshold = tune())
 
 # create workflow object
 pca_workflow <- workflow() %>%
@@ -719,6 +736,8 @@ augment(pca_final_fit, new_data = anime_test) %>%
 
 augment(pca_final_fit, new_data = anime_test) %>%
   rmse(truth = score, estimate = .pred)
+
+save(pca_final_fit, file = "models/pca_lm_fit.rda")
 ```
 
 ```{r}
@@ -737,7 +756,7 @@ predict(pca_final_fit,
                        producers_score = category_mean_score("['Other or NA']", producers_mean_scores)))
 
 # spy family
-predict(lm_fit,
+predict(pca_final_fit,
         new_data = tibble(type = "tv",
                        episodes = 13,
                        source = "manga",
@@ -750,5 +769,3 @@ predict(lm_fit,
                        demographics_score = 7.07873,
                        producers_score = 7.254288))
 ```
-
-
