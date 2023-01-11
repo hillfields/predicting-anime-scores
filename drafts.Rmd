@@ -28,7 +28,8 @@ anime_raw %>%
 anime_raw %>%
   ggplot(aes(x = scored_by, y = score)) +
   geom_point() +
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm") +
+  ylim(0, 10)
 ```
 
 ```{r}
@@ -98,6 +99,17 @@ anime_raw %>%
   geom_jitter(width = 0.2) +
   theme(axis.text.x = element_text(angle = 90))
 ```
+
+```{r}
+anime_raw %>%
+  drop_na() %>%
+  unite(start_air, c(start_year, start_season)) %>%
+  filter(start_air == "2016_fall") %>%
+  ggplot(aes(start_air, score)) +
+  geom_jitter(width = 0.2) +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
 
 ```{r}
 anime_raw %>%

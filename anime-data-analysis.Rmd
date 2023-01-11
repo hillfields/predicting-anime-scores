@@ -21,7 +21,6 @@ library(patchwork)
 library(ggrepel)
 
 anime_raw <- read_csv("data/anime.csv")
-manga_raw <- read_csv("data/manga.csv")
 ```
 
 # Ideas
@@ -68,16 +67,19 @@ anime <- anime_raw %>%
 ## Scores
 
 ```{r}
+# histogram
 p1 <- anime %>%
   ggplot(aes(x = score)) +
   geom_histogram() +
   labs(title = "Histogram of Scores")
 
+# boxplot
 p2 <- anime %>%
   ggplot(aes(x = score)) +
   geom_boxplot(outlier.color = "red") +
   labs(title = "Boxplot of Scores")
 
+# combine plots
 p1 + p2 + plot_layout(ncol = 1)
 ```
 
@@ -85,12 +87,13 @@ p1 + p2 + plot_layout(ncol = 1)
 
 ```{r}
 anime %>%
+  # get mean scores for each type
   group_by(type) %>%
   summarise(score = mean(score)) %>%
-  
+  # sort by decreasing order
   arrange(desc(score)) %>%
   mutate(type = fct_inorder(type)) %>%
-  
+  # create bar plot
   ggplot(aes(x = type, y = score)) +
   geom_bar(stat = "identity")
 ```
@@ -99,8 +102,10 @@ anime %>%
 
 ```{r}
 anime %>%
+  # scatter plot
   ggplot(aes(x = episodes, y = score)) +
   geom_point() +
+  # prevent overlapping labels
   geom_text_repel(data = subset(anime, episodes > 550),
                   aes(label = title),
                   box.padding = 1)
@@ -110,12 +115,13 @@ anime %>%
 
 ```{r}
 anime %>%
+  # get mean scores for each source
   group_by(source) %>%
   summarise(score = mean(score)) %>%
-  
+  # sort by decreasing order
   arrange(desc(score)) %>%
   mutate(source = fct_inorder(source)) %>%
-  
+  # create bar plot
   ggplot(aes(x = source, y = score)) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(angle = 90))
@@ -125,8 +131,11 @@ anime %>%
 
 ```{r}
 anime %>%
+  # scatter plot
   ggplot(aes(x = members, y = score)) +
   geom_point() +
+  
+  # prevent overlapping labels
   geom_text_repel(data = subset(anime, members > 2.7e6),
                   aes(label = title),
                   box.padding = 0.7)
@@ -281,6 +290,7 @@ genres_mean_scores <- anime %>%
   arrange(desc(score))
 
 genres_mean_scores
+save(genres_mean_scores, file = "data/genres_mean_scores.Rdata")
 ```
 
 ## Themes
@@ -299,6 +309,7 @@ themes_mean_scores <- anime %>%
   arrange(desc(score))
 
 themes_mean_scores
+save(themes_mean_scores, file = "data/themes_mean_scores.Rdata")
 ```
 
 ## Studios
@@ -317,6 +328,7 @@ studios_mean_scores <- anime %>%
   arrange(desc(score))
 
 studios_mean_scores
+save(studios_mean_scores, file = "data/studios_mean_scores.Rdata")
 ```
 
 ## Demographics
@@ -335,6 +347,7 @@ demographics_mean_scores <- anime %>%
   arrange(desc(score))
 
 demographics_mean_scores
+save(demographics_mean_scores, file = "data/demographics_mean_scores.Rdata")
 ```
 
 ## Producers
@@ -353,6 +366,7 @@ producers_mean_scores <- anime %>%
   arrange(desc(score))
 
 producers_mean_scores
+save(producers_mean_scores, file = "data/producers_mean_scores.Rdata")
 ```
 
 # Calculate Scores
@@ -376,6 +390,7 @@ category_mean_score <- function(categories, df_map, replace_empty = total_mean_s
   # otherwise, calculate the mean score over those categories
   else {
     mean_score <- categories %>%
+      # remove brackets and single quotes
       str_remove("\\[") %>%
       str_remove("\\]") %>%
       str_remove_all("\\'") %>%
