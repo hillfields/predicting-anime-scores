@@ -1,2 +1,3 @@
-# anime-data-analysis
- Predicting anime scores on MyAnimeList
+# Predicting Anime Scores on MyAnimeList
+
+Uses `tidymodels` for the models and `shiny` for the app
