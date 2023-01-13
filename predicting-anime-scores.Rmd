@@ -642,24 +642,6 @@ save(rf_fit, file = "models/rf_fit.rda")
 ```
 
 ```{r}
-rf_model <- rand_forest() %>%
-  set_mode("regression") %>%
-  set_engine("ranger")
-
-rf_workflow <- workflow() %>%
-  add_model(rf_model) %>%
-  add_recipe(anime_recipe)
-
-rf_fit <- rf_workflow %>%
-  fit(anime_train)
-
-augment(rf_fit, anime_test) %>%
-  mutate(avg_error = .pred - score) %>% 
-  ggplot(aes(x = avg_error)) +
-  geom_histogram()
-```
-
-```{r}
 # spy family
 predict(lm_fit,
         new_data = tibble(type = "tv",
