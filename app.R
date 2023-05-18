@@ -17,6 +17,7 @@ load("models/boost_fit.rda")
 load("models/knn_fit.rda")
 load("models/pca_boost_fit.rda")
 load("models/pca_lm_fit.rda")
+load("models/rf_fit.rda")
 
 # calculate mean score over all anime in the data
 # used in the category_mean_score() function below
@@ -79,7 +80,6 @@ ui <- fluidPage(
       textOutput("message"),
       textOutput("lm_pred"),
       textOutput("boost_pred"),
-      textOutput("knn_pred"),
       textOutput("pca_lm_pred"),
       textOutput("pca_boost_pred")
     )
@@ -146,25 +146,6 @@ server <- function(input, output, session) {
                producers_score = producers_score()
              ))[[1, 1]] %>% round(2))
   })
-  
-  output$knn_pred <- renderText({
-    paste0("> K-Nearest Neighbors Model: ",
-           predict(
-             knn_fit,
-             new_data = tibble(
-               type = type(),
-               episodes = episodes(),
-               source = anime_source(),
-               members = members(),
-               favorites = favorites(),
-               rating = rating(),
-               genres_score = genres_score(),
-               themes_score = themes_score(),
-               studios_score = studios_score(),
-               demographics_score = demographics_score(),
-               producers_score = producers_score()
-             ))[[1, 1]] %>% round(2))
-  })
 
   output$pca_lm_pred <- renderText({
     paste0("> PCA Linear Model: ",
@@ -189,6 +170,25 @@ server <- function(input, output, session) {
     paste0("> PCA Boosted Model: ",
            predict(
              final_pca_boost_fit,
+             new_data = tibble(
+               type = type(),
+               episodes = episodes(),
+               source = anime_source(),
+               members = members(),
+               favorites = favorites(),
+               rating = rating(),
+               genres_score = genres_score(),
+               themes_score = themes_score(),
+               studios_score = studios_score(),
+               demographics_score = demographics_score(),
+               producers_score = producers_score()
+             ))[[1, 1]] %>% round(2))
+  })
+
+  output$rf_pred <- renderText({
+    paste0("> Random Forest Model: ",
+           predict(
+             knn_final_fit,
              new_data = tibble(
                type = type(),
                episodes = episodes(),
