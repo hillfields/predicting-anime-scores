@@ -96,7 +96,7 @@ get_anime_details <- function(url) {
   ##### THEMES #####
   
   themes <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Themes:')]") %>%
+    html_nodes(xpath = "..//span[contains(text(), 'Theme')]") %>%
     html_nodes(xpath = "..") %>%
     html_elements("a") %>%
     html_text2()
@@ -166,7 +166,5 @@ get_anime_details <- function(url) {
 }
 
 # test function
-# url <- "https://myanimelist.net/anime/51179/Mushoku_Tensei_II__Isekai_Ittara_Honki_Dasu"
+# url <- "https://myanimelist.net/anime/50265/Spy_x_Family"
 # get_anime_details(url)
-
-get_anime_details("https://myanimelist.net/anime/5114/Fullmetal_Alchemist__Brotherhood")
