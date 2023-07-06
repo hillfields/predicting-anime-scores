@@ -122,3 +122,32 @@ anime_raw %>%
   unite(start_air, c(start_year, start_season)) %>%
   filter(start_air == "2022_winter")
 ```
+
+Episodes vs. score
+
+```{r}
+anime %>%
+  # scatter plot
+  ggplot(aes(x = episodes, y = score)) +
+  geom_point() +
+  # prevent overlapping labels
+  geom_text_repel(data = subset(anime, episodes > 550),
+                  aes(label = title),
+                  box.padding = 1)
+```
+
+Density curves
+
+```{r}
+anime %>%
+  mutate(type_order = reorder(type, score, FUN = median)) %>%
+  group_by(type) %>%
+  ggplot(aes(x = score, fill = type_order)) +
+  geom_density(alpha = 0.3) +
+  facet_wrap(~ type_order, ncol = 1) +
+  labs(title = "Density curves of MAL scores by type",
+       x = "Score",
+       y = "Density") +
+  theme(legend.position = "none")
+```
+

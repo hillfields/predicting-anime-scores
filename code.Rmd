@@ -1,0 +1,602 @@
+---
+title: "Predicting Anime Scores"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE)
+```
+
+# Prerequisites
+
+```{r, message=FALSE}
+# load libraries
+library(tidyverse)
+library(tidymodels)
+library(patchwork)
+library(ggrepel)
+library(vip)
+
+# set theme for plots
+theme_set(theme_bw())
+
+# load data
+anime_raw <- read_csv("data/anime.csv")
+```
+
+
+# Data cleaning {.tabset}
+
+Variable | Description
+:--|:--
+`title` | Anime title
+`score` | [Weighted score](https://myanimelist.net/info.php?go=topanime) on MyAnimeList (out of 10)
+`type` | Anime type (e.g., TV, movie, OVA)
+`source` | Source that the anime was adapted from (e.g, manga, light novel, original)
+`members` | Number of members who added the anime to their list
+`favorites` | Number of members who favorited the anime in their list
+`rating` | Age rating (e.g., PG, PG-13, R)
+`genres` | Genre(s) (e.g., Action, Drama, Comedy)
+`themes` | Theme(s) (e.g., Isekai, Historical, Music)
+`demographics` | Primary audience (e.g., shounen, shoujo, seinen - more details [here](https://www.cbr.com/four-main-shonen-shojo-seinen-josei-manga-demographics-explained/))
+`studios` | Studio(s) that animate the anime
+`producers` | Producer(s) that fund the anime
+
+```{r}
+anime <- anime_raw %>%
+  # filter out any animes that do not have scores
+  drop_na(score) %>%
+  # keep only animes that have finished airing (since scores can change while it's airing)
+  filter(status == "finished_airing") %>%
+  # select relevant variables
+  select(title, score, type, source, members, favorites, rating, 
+         genres, themes, demographics, studios, producers) %>%
+  # filter out rows that have NA values
+  drop_na()
+
+anime
+```
+
+Multi-label issue
+- Computationally expensive
+- Want less parameters
+
+```{r}
+# fills in empty strings in a vector
+replace_empty_string <- function(.str) {
+  ifelse(.str == "", "Other or NA", .str)
+}
+
+# returns a dataframe with the mean score of each unique value in a given category
+get_mean_scores <- function(df, category) {
+  mean_scores <- df %>%
+    # remove square brackets
+    mutate(cleaned_category = str_remove(!!sym(category), "\\["),
+           cleaned_category = str_remove(cleaned_category, "\\]")) %>%
+    # separate column into multiple rows for each unique value in the category column
+    separate_rows(cleaned_category, sep = ",") %>% 
+    # remove apostrophes and whitespace
+    mutate(cleaned_category = str_remove(cleaned_category, "\\'"),
+           cleaned_category = str_remove(cleaned_category, "\\'"),
+           cleaned_category = str_trim(cleaned_category)) %>%
+    # replace missing values with filler
+    mutate_at("cleaned_category", ~ replace_empty_string(.x)) %>%
+    # get mean score for each category
+    group_by(cleaned_category) %>%
+    summarise(score = mean(score)) %>%
+    # sort from highest to lowest
+    arrange(desc(score))
+  
+  # save dataframe as CSV file
+  file_name <- str_glue("data/mean_scores_{category}.csv")
+  write_csv(mean_scores, file_name)
+  
+  # return dataframe
+  return(mean_scores)
+}
+```
+
+## Genres
+
+```{r}
+get_mean_scores(anime, "genres")
+```
+
+## Themes
+
+```{r}
+get_mean_scores(anime, "themes")
+```
+
+## Studios
+
+```{r}
+get_mean_scores(anime, "studios")
+```
+
+## Demographics
+
+```{r}
+get_mean_scores(anime, "demographics")
+```
+
+## Producers
+
+```{r}
+get_mean_scores(anime, "producers")
+```
+
+## Calculate scores
+
+```{r, message=FALSE}
+# calculate overall median score
+total_mean_score <- anime %>% 
+  pull(score) %>% 
+  median()
+
+# example: maps something like categories = ['category1', 'category2'] to a mean score
+category_mean_score <- function(categories, df_map, replace_empty = total_mean_score) {
+  # get mapped values
+  category <- df_map %>% pull(1)
+  score <- df_map %>% pull(2)
+  
+  # use overall median score if input is empty
+  if (categories == "[]") {
+    return(replace_empty)
+  }
+  
+  # otherwise, calculate the mean score over those categories
+  else {
+    mean_score <- categories %>%
+      # remove brackets and single quotes
+      str_remove("\\[") %>%
+      str_remove("\\]") %>%
+      str_remove_all("\\'") %>%
+      # split at commas
+      strsplit(split = ", ") %>%
+      unlist() %>%
+      # map each category to a score and calculate the mean
+      plyr::mapvalues(from = category, 
+                      to = score,
+                      warn_missing = FALSE) %>%
+      as.numeric() %>%
+      mean()
+    
+    return(mean_score)
+  }
+}
+
+# load dataframes with mean scores 
+mean_scores_genres <- read_csv("data/mean_scores_genres.csv")
+mean_scores_themes <- read_csv("data/mean_scores_themes.csv")
+mean_scores_studios <- read_csv("data/mean_scores_studios.csv")
+mean_scores_demographics <- read_csv("data/mean_scores_demographics.csv")
+mean_scores_producers <- read_csv("data/mean_scores_producers.csv")
+
+anime_clean <- anime %>%
+  # get mean scores for multi-label columns
+  mutate(genres_score = map_dbl(genres, ~ category_mean_score(.x, mean_scores_genres)),
+         themes_score = map_dbl(themes, ~ category_mean_score(.x, mean_scores_themes)),
+         studios_score = map_dbl(studios, ~ category_mean_score(.x, mean_scores_studios)),
+         demographics_score = map_dbl(demographics, ~ category_mean_score(.x, mean_scores_demographics)),
+         producers_score = map_dbl(producers, ~ category_mean_score(.x, mean_scores_producers))) %>%
+  # remove old columns
+  select(-c(genres, themes, studios, demographics, producers)) %>%
+  # convert character columns into factors
+  mutate_if(is.character, factor)
+
+# save as CSV file
+write_csv(anime_clean, "data/anime_clean.csv")
+```
+
+# Exploratory data analysis {.tabset}
+
+```{r}
+# load cleaned data
+anime_clean <- read_csv("data/anime_clean.csv")
+anime_clean
+```
+
+## MAL scores
+
+```{r}
+# histogram
+p1 <- anime_clean %>%
+  ggplot(aes(x = score)) +
+  geom_histogram(bins = 50) +
+  labs(title = "Histogram of MAL scores")
+
+# boxplot
+p2 <- anime_clean %>%
+  ggplot(aes(x = score)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of MAL scores")
+
+# combine plots
+p1 + p2 + plot_layout(ncol = 1)
+```
+
+```{r}
+# correlation plot for numeric variables
+anime_clean %>%
+  select_if(is.numeric) %>%
+  cor() %>%
+  corrplot::corrplot(method = "number")
+```
+
+## Type
+
+```{r}
+anime_clean %>%
+  # boxplots by type, ordered by median score
+  ggplot(aes(x = reorder(type, score, FUN = median), 
+             y = score, 
+             color = reorder(type, score, FUN = median))) +
+  geom_boxplot() +
+  # horizontal dashed line for overall mean score
+  geom_hline(aes(yintercept = mean(score)),
+             linetype = "dashed") +
+  # update labels and other plot features
+  labs(title = "MAL scores by type",
+       x = "Genre",
+       y = "Score",
+       color = "Genre") +
+  theme(legend.position = "none")
+```
+
+## Source
+
+```{r}
+anime_clean %>%
+  # boxplot by source, ordered by median score
+  ggplot(aes(x = reorder(source, score, FUN = median), 
+             y = score, 
+             color = reorder(source, score, FUN = median))) +
+  geom_boxplot() +
+  # horizontal dashed line for overall mean score
+  geom_hline(aes(yintercept = mean(score)),
+             linetype = "dashed") +
+  # update labels and other plot features
+  labs(title = "MAL scores by source",
+       x = "Source",
+       y = "Score",
+       color = "Source") +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+```
+
+## Members
+
+```{r}
+anime_clean %>%
+  # scatter plot
+  ggplot(aes(x = members, y = score)) +
+  geom_point() +
+  # horizontal dashed line for overall mean score
+  geom_hline(aes(yintercept = mean(score)),
+             linetype = "dashed") +
+  # point labels for titles with the most members
+  geom_text_repel(data = subset(anime_clean, members > 2.5e6),
+                  aes(label = title),
+                  box.padding = 0.6) +
+  # update labels
+  labs(title = "MAL scores vs. number of members",
+       x = "Number of members",
+       y = "Score")
+```
+
+## Favorites
+
+```{r}
+anime_clean %>%
+  # scatter plot
+  ggplot(aes(x = favorites, y = score)) +
+  geom_point() +
+  # horizontal dashed line for overall mean score
+  geom_hline(aes(yintercept = mean(score)),
+             linetype = "dashed") +
+  # point labels for titles with the most favorites
+  geom_text_repel(data = subset(anime_clean, favorites > 1.5e5),
+                  aes(label = title),
+                  box.padding = 1.1) +
+  # update labels
+  labs(title = "MAL scores vs. number of favorites",
+       x = "Number of favorites",
+       y = "Score")
+```
+
+## Rating
+
+```{r}
+anime_clean %>%
+  # boxplot by rating, ordered by median score
+  ggplot(aes(x = reorder(rating, score, FUN = median), 
+             y = score, 
+             color = reorder(rating, score, FUN = median))) +
+  geom_boxplot() +
+  # horizontal dashed line for overall mean score
+  geom_hline(aes(yintercept = mean(score)),
+             linetype = "dashed") +
+  # update labels and other plot features
+  labs(title = "MAL Scores by rating",
+       x = "Genre",
+       y = "Score",
+       color = "Genre") +
+  theme(axis.title.x = element_blank(),
+        legend.position = "none")
+```
+
+## Derived mean scores
+
+```{r, message=FALSE}
+anime_clean %>%
+  # convert to wide format
+  select(contains("score")) %>%
+  pivot_longer(cols = contains("_score"),
+               names_to = "type",
+               values_to = "type_score") %>%
+  # scatter plot + smoothing
+  ggplot(aes(x = type_score, y = score)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ type, nrow = 2) +
+  # update labels
+  labs(title = "MAL scores vs. derived mean scores",
+       x = "Derived mean score",
+       y = "MAL score")
+```
+
+# Models
+
+## Preparing the data
+
+```{r, message=FALSE}
+# load cleaned data
+anime_clean <- read_csv("data/anime_clean.csv")
+
+# partition training and testing sets
+set.seed(1)
+anime_split <- initial_split(anime_clean, strata = "score")
+anime_train <- training(anime_split)
+anime_test <- testing(anime_split)
+
+# create 5-fold cross-validation object
+anime_folds <- vfold_cv(anime_train, v = 5)
+
+# specify recipe
+anime_recipe <- recipe(score ~ ., data = anime_train) %>%
+  step_rm(title) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_scale(all_numeric_predictors())
+```
+
+## Linear regression
+
+```{r}
+# specify linear regression model
+lm_model <- linear_reg() %>%
+  set_mode("regression") %>%
+  set_engine("lm")
+
+# specify workflow
+lm_workflow <- workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(anime_recipe)
+
+# fit model using cross-validation
+lm_fit <- lm_workflow %>%
+  fit_resamples(anime_folds)
+
+# select the best model and fit
+lm_final_fit <- lm_fit %>%
+  select_best("rmse") %>%
+  finalize_workflow(lm_workflow, .) %>%
+  fit(anime_train)
+
+# plot actual vs. predicted scores
+augment(lm_final_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red") +
+  coord_cartesian(xlim = c(0, 10),
+                  ylim = c(0, 10)) +
+  labs(title = "Linear model: actual vs. predicted scores",
+       x = "Predicted score",
+       y = "Actual score")
+
+# calculate RMSE
+augment(lm_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+# save final model
+save(lm_final_fit, file = "models/lm_fit.rda")
+
+# get coefficient estimates
+lm_final_fit %>%
+  tidy() %>%
+  mutate(significant = ifelse(p.value < 0.05, "yes", "no"))
+```
+
+## Nearest Neighbor
+
+```{r}
+# specify KNN model
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("regression") %>%
+  set_engine("kknn")
+
+# specify workflow
+knn_workflow <- workflow() %>%
+  add_model(knn_model) %>%
+  add_recipe(anime_recipe)
+
+# specify hyperparameters
+neighbors_grid <- grid_regular(neighbors(range = c(5, 50)),
+                               levels = 10)
+
+# fit model using cross-validation and hyperparameters
+knn_tune_res <- tune_grid(knn_workflow,
+                          resamples = anime_folds,
+                          grid = neighbors_grid)
+
+# plot results
+autoplot(knn_tune_res)
+
+# select the best model and fit
+knn_final_fit <- knn_tune_res %>%
+  select_best("rmse") %>%
+  finalize_workflow(knn_workflow, .) %>%
+  fit(anime_train)
+
+# plot actual vs. predicted scores
+augment(knn_final_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red") +
+  coord_cartesian(xlim = c(0, 10),
+                  ylim = c(0, 10)) +
+  labs(title = "KNN model: actual vs. predicted scores",
+       x = "Predicted score",
+       y = "Actual score")
+
+# calculate RMSE
+augment(knn_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+# save final model
+save(knn_tune_res, file = "models/knn_tune_res.rda")
+save(knn_final_fit, file = "models/knn_fit.rda")
+```
+
+## Boosted trees
+
+https://juliasilge.com/blog/xgboost-tune-volleyball/
+
+```{r}
+# specify boosted trees model
+boost_model <- boost_tree(trees = 1000,
+                          min_n = tune(),
+                          mtry = tune(),
+                          learn_rate = tune(),
+                          tree_depth = tune(),
+                          sample_size = tune(),
+                          loss_reduction = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("regression")
+
+# specify workflow
+boost_workflow <- workflow() %>%
+  add_model(boost_model) %>%
+  add_recipe(anime_recipe)
+
+# specify hyperparameters (cover hyperparameter space as much as possible)
+boost_grid <- grid_latin_hypercube(min_n(),
+                                   finalize(mtry(), anime_train),
+                                   learn_rate(),
+                                   tree_depth(),
+                                   sample_size = sample_prop(),
+                                   loss_reduction(),
+                                   size = 50)
+
+# fit model using cross-validation and hyperparameters
+boost_tune_res <- tune_grid(boost_workflow,
+                            resamples = anime_folds,
+                            grid = boost_grid)
+
+# plot results
+autoplot(boost_tune_res, metric = "rmse")
+
+# select the best model and fit
+boost_final_fit <- boost_tune_res %>%
+  select_best("rmse") %>%
+  finalize_workflow(boost_workflow, .) %>%
+  fit(anime_train)
+
+# plot actual vs. predicted scores
+augment(boost_final_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red") +
+  coord_cartesian(xlim = c(0, 10),
+                  ylim = c(0, 10)) +
+  labs(title = "Boosted trees: actual vs. predicted scores",
+       x = "Predicted score",
+       y = "Actual score")
+
+# calculate RMSE
+augment(boost_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+# variable importance plot
+boost_final_fit %>%
+  extract_fit_parsnip() %>%
+  vip() + 
+  labs(title = "Boosted trees: variable importance",
+       x = "Predictors",
+       y = "Importance")
+
+# save final model
+save(boost_tune_res, file = "models/boost_tune_res.rda")
+save(boost_final_fit, file = "models/boost_fit.rda")
+```
+
+## Random forest
+
+```{r}
+# specify random forest model
+rf_model <- rand_forest(mtry = tune(),
+                        trees = 1000,
+                        min_n = tune()) %>%
+  set_mode("regression") %>%
+  set_engine("ranger", importance = "impurity")
+
+# specify workflow
+rf_workflow <- workflow() %>%
+  add_model(rf_model) %>%
+  add_recipe(anime_recipe)
+
+# specify hyperparameters
+rf_tune_res <- tune_grid(rf_workflow,
+                         resamples = anime_folds,
+                         grid = 30)
+
+# plot results
+autoplot(rf_tune_res, metric = "rmse")
+
+# select the best model and fit
+rf_final_fit <- rf_tune_res %>%
+  select_best("rmse") %>%
+  finalize_workflow(rf_workflow, .) %>%
+  fit(anime_train)
+
+# plot actual vs. predicted scores
+augment(rf_final_fit, new_data = anime_test) %>% 
+  ggplot(aes(x = .pred, y = score)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(lty = 2, color = "red") +
+  coord_cartesian(xlim = c(0, 10),
+                  ylim = c(0, 10)) +
+  labs(title = "Random forest: actual vs. predicted scores",
+       x = "Predicted score",
+       y = "Actual score")
+
+# calculate RMSE
+augment(rf_final_fit, new_data = anime_test) %>%
+  rmse(truth = score, estimate = .pred)
+
+# variable importance plot
+rf_final_fit %>%
+  extract_fit_parsnip() %>%
+  vip() + 
+  labs(title = "Random forest: variable importance",
+       x = "Predictors",
+       y = "Importance")
+
+# save final model
+save(rf_tune_res, file = "models/rf_tune_res.rda")
+save(rf_final_fit, file = "models/rf_fit.rda")
+```
