@@ -32,7 +32,7 @@ get_anime_details <- function(url) {
   ##### SOURCE #####
   
   source <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Source:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Source:')]") %>%
     html_nodes(xpath = "..") %>%
     html_text2() %>%
     str_split(": ") %>%
@@ -44,7 +44,7 @@ get_anime_details <- function(url) {
   ##### MEMBERS #####
   
   members <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Members:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Members:')]") %>%
     html_nodes(xpath = "..") %>%
     html_text2() %>%
     str_split(": ") %>%
@@ -68,7 +68,7 @@ get_anime_details <- function(url) {
   ##### RATING #####
   
   rating <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Rating:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Rating:')]") %>%
     html_nodes(xpath = "..") %>%
     html_text2() %>%
     str_split(": ") %>%
@@ -84,7 +84,7 @@ get_anime_details <- function(url) {
   ##### GENRES #####
   
   genres <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Genres:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Genre')]") %>%
     html_nodes(xpath = "..") %>%
     html_elements("a") %>%
     html_text2()
@@ -96,7 +96,7 @@ get_anime_details <- function(url) {
   ##### THEMES #####
   
   themes <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Theme')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Theme')]") %>%
     html_nodes(xpath = "..") %>%
     html_elements("a") %>%
     html_text2()
@@ -108,7 +108,7 @@ get_anime_details <- function(url) {
   ##### STUDIOS #####
   
   studios <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Studios:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Studios:')]") %>%
     html_nodes(xpath = "..") %>%
     html_elements("a") %>%
     html_text2()
@@ -116,7 +116,7 @@ get_anime_details <- function(url) {
   ##### DEMOGRAPHIC #####
   
   demographic <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Demographic:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Demographic:')]") %>%
     html_nodes(xpath = "..") %>%
     html_elements("a") %>%
     html_text2()
@@ -128,7 +128,7 @@ get_anime_details <- function(url) {
   ##### PRODUCERS #####
   
   producers <- html %>%
-    html_nodes(xpath = "..//span[contains(text(), 'Producers:')]") %>%
+    html_nodes(xpath = "//span[contains(text(), 'Producers:')]") %>%
     html_nodes(xpath = "..") %>%
     html_elements("a") %>%
     html_text2()

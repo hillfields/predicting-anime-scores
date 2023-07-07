@@ -28,7 +28,6 @@ theme_set(theme_bw())
 anime_raw <- read_csv("data/anime.csv")
 ```
 
-
 # Data cleaning {.tabset}
 
 Variable | Description
@@ -416,6 +415,12 @@ augment(lm_final_fit, new_data = anime_test) %>%
 save(lm_final_fit, file = "models/lm_fit.rda")
 
 # get coefficient estimates
+lm_final_fit %>%
+  tidy() %>%
+  mutate(significant = ifelse(p.value < 0.05, "yes", "no"))
+```
+
+```{r}
 lm_final_fit %>%
   tidy() %>%
   mutate(significant = ifelse(p.value < 0.05, "yes", "no"))
