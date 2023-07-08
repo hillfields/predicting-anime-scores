@@ -1,30 +1,46 @@
 # Predicting Anime Scores on MyAnimeList
 
-This interactive Shiny app allows a user to enter a URL for an anime page on [MyAnimeList](https://myanimelist.net/) and get back its predicted score using several regression models: linear regression, k-nearest neighbors, boosted trees, and random forest.
+This interactive Shiny app allows a user to enter a URL for an anime page on [MyAnimeList](https://myanimelist.net/) (MAL), an anime and manga database, and get back its predicted score using several regression models: linear regression, k-nearest neighbors, boosted trees, and random forest.
 
-![](img/app.png)
-
-## Results / visualization
-
-## Model performance (test RMSE)
-
-Anime model
-
-- Linear regression: 0.6060566
-- K-nearest neighbors: 0.5809974
-- Boosted trees: 0.4378353
-- Random forest: 0.4488642
+[Add centered image here]
 
 ## Skills
 
-- Preprocessing data with the tidyverse
-- Visualizing data with ggplot2 (static plots) and ggiraph (interactive plots)
-- Building machine learning models with tidymodels
-- Scraping MAL sites with rvest
-- Creating an interactive app with RShiny
+- Preprocessing data with the **tidyverse**
+- Visualizing data with **ggplot2** (static plots) and **ggiraph** (interactive plots)
+- Building machine learning models with **tidymodels**
+- Scraping MAL sites with **rvest**
+- Creating an interactive app with **Shiny**
 
 ## Challenges
 
-- Mapping categories to scores
-- Refactor a lot of code (made functions)
-- Creating the app (design, server function)
+- Dealing with variables with multiple labels (mapped them to numeric scores)
+- Figuring out how to use Shiny (designing the UI, updating inputs based on the URL, organizing functions into separate scripts)
+
+## Results
+
+### Model performance (test RMSE)
+
+- **Linear regression:** 0.606
+- **K-nearest neighbors:** 0.581
+- **Boosted trees:** 0.438 (best)
+- **Random forest:** 0.449
+
+### Visuals
+
+<p align="center" width="100%">
+    <img width="33%" src="images/score_vs_numeric"> 
+</p>
+
+### Categorical variables
+
+Category | Lower predicted scores | Higher predicted scores
+:--|:--|:--
+Source | web novels, light novels, manga | music, radio
+Type | TV, movie | music, ONA
+Rating | R, PG-13 | Rx (hentai), G
+
+### Numeric variables
+
+- Producers, studios, themes, genres, and demographics with higher average scores also tended to have higher predicted scores
+- The number of members and favorites were each correlated with predicted scores, though the effect of these variables eventually reach a plateau

@@ -3,6 +3,7 @@ library(shiny)
 library(tidyverse)
 library(tidymodels)
 library(here)
+library(bslib)
 
 # load functions for getting anime details and mean scores
 source("scrape.R")
@@ -23,6 +24,8 @@ load(here("models/rf_fit.rda"))
 
 # define user interface
 ui <- fluidPage(
+  theme = bs_theme(bootswatch = "minty"),
+  
   # title
   titlePanel("MyAnimeList Score Predictor"),
   
@@ -31,67 +34,84 @@ ui <- fluidPage(
     sidebarPanel(
       textInput("url",
                 "MyAnimeList URL",
-                "https://myanimelist.net/anime/50265/Spy_x_Family"),
+                "https://myanimelist.net/anime/52034/Oshi_no_Ko"),
       
-      textInput("title", 
-                "Title of Anime", 
-                "Spy x Family"),
+      fluidRow(
+        column(6,
+               textInput("title", 
+                         "Title of Anime", 
+                         "[Oshi No Ko]")),
+        column(6,
+               selectInput("type", 
+                           "Type", 
+                           choices = levels(factor(anime_clean$type)), 
+                           selected = "tv"))
+      ),
       
-      selectInput("type", 
-                  "Type", 
-                  choices = levels(factor(anime_clean$type)), 
-                  selected = "tv"),
-      
-      selectInput("source", 
-                  "Source", 
-                  choices = levels(factor(anime_clean$source)), 
-                  selected = "manga"),
-      
-      numericInput("members", 
-                   "Number of Members", 
-                   min = 0, 
-                   step = 0.5, 
-                   value = 1361732),
-      
-      numericInput("favorites", 
-                   "Number of Favorites", 
-                   min = 0, 
-                   step = 0.5, 
-                   value = 37682),
-      
-      selectInput("rating", 
-                  "Rating", 
-                  choices = levels(factor(anime_clean$rating)),
-                  selected = "pg_13"),
-      
-      selectizeInput("genres", 
-                     "Genres", 
-                     choices = levels(factor(mean_scores_genres$cleaned_category)), 
-                     multiple = TRUE, 
-                     selected = c("Action", "Comedy")),
-      
-      selectizeInput("themes", 
-                     "Themes", 
-                     choices = levels(factor(mean_scores_themes$cleaned_category)), 
-                     multiple = TRUE, 
-                     selected = c("Childcare")),
-      
-      selectizeInput("studios", 
-                     "Studios", 
-                     choices = levels(factor(mean_scores_studios$cleaned_category)), 
-                     multiple = TRUE, 
-                     selected = c("Wit Studio", "CloverWorks")),
-      
-      selectizeInput("demographic", 
-                     "Demographic", 
-                     choices = levels(factor(mean_scores_demographics$cleaned_category)), 
-                     multiple = TRUE, 
-                     selected = c("Shounen")),
+      fluidRow(
+        column(6,
+               selectInput("source", 
+                           "Source", 
+                           choices = levels(factor(anime_clean$source)), 
+                           selected = "manga")),
+        column(6,
+               selectInput("rating", 
+                           "Rating", 
+                           choices = levels(factor(anime_clean$rating)),
+                           selected = "pg_13"))
+      ),
+
+      fluidRow(
+        column(6,
+               numericInput("members", 
+                            "Number of Members", 
+                            min = 0, 
+                            step = 0.5, 
+                            value = 570781)),
+        column(6,
+               numericInput("favorites", 
+                            "Number of Favorites", 
+                            min = 0, 
+                            step = 0.5, 
+                            value = 21874))
+      ),
+
+      fluidRow(
+        column(6,
+               selectizeInput("genres", 
+                              "Genres", 
+                              choices = levels(factor(mean_scores_genres$cleaned_category)), 
+                              multiple = TRUE, 
+                              selected = c("Drama", "Supernatural"))),
+        column(6,
+               selectizeInput("themes", 
+                              "Themes", 
+                              choices = levels(factor(mean_scores_themes$cleaned_category)), 
+                              multiple = TRUE, 
+                              selected = c("Reincarnation", "Showbiz")))
+      ),
+  
+      fluidRow(
+        column(6,
+               selectizeInput("studios", 
+                              "Studios", 
+                              choices = levels(factor(mean_scores_studios$cleaned_category)), 
+                              multiple = TRUE, 
+                              selected = c("Doga Kobo"))),
+        column(6,
+               selectizeInput("demographic", 
+                              "Demographic", 
+                              choices = levels(factor(mean_scores_demographics$cleaned_category)), 
+                              multiple = TRUE, 
+                              selected = c("Seinen")))
+      ),
       
       selectizeInput("producers", 
                      "Producers", 
                      choices = NULL, 
-                     multiple = TRUE)
+                     multiple = TRUE),
+      
+      width = 6
     ),
     
     # outputs on the right
@@ -100,17 +120,18 @@ ui <- fluidPage(
       textOutput("lm_pred"),
       textOutput("knn_pred"),
       textOutput("boost_pred"),
-      textOutput("rf_pred")
+      textOutput("rf_pred"),
+      width = 6
     )
   )
 )
 
 # define backend
 server <- function(input, output, session) {
-  
+  # get inputted URL
   mal_url <- reactive(input$url)
   
-  # detects when the URL changes
+  # detect when the URL changes
   observeEvent(mal_url(), {
     # retrieve anime details from URL
     details <- reactive(get_anime_details(mal_url()))
@@ -123,7 +144,7 @@ server <- function(input, output, session) {
     updateTextInput(session,
                     "type",
                     value = details()$type)
-
+    
     updateTextInput(session,
                     "source",
                     value = details()$source)
@@ -135,7 +156,7 @@ server <- function(input, output, session) {
     updateNumericInput(session,
                        "favorites",
                        value = details()$favorites)
-
+    
     updateTextInput(session,
                     "rating", 
                     value = details()$rating)
@@ -143,19 +164,19 @@ server <- function(input, output, session) {
     updateSelectizeInput(session,
                          "genres",
                          selected = details()$genres)
-
+    
     updateSelectizeInput(session,
                          "themes",
                          selected = details()$themes)
-
+    
     updateSelectizeInput(session,
                          "studios",
                          selected = details()$studios)
-
+    
     updateSelectizeInput(session,
                          "demographic",
                          selected = details()$demographic)
-
+    
     updateSelectizeInput(session,
                          "producers",
                          selected = details()$producers)
@@ -169,7 +190,7 @@ server <- function(input, output, session) {
                        "producers",
                        choices = levels(factor(mean_scores_producers$cleaned_category)), 
                        server = TRUE,
-                       selected = c("TV Tokyo", "Shogakukan-Shueisha Productions", "TOHO animation", "Shueisha"))
+                       selected = c("Shueisha", "CyberAgent", "Kadokawa"))
   
   # turn inputs into reactive variables so that the outputs are updated when the inputs are changed
   title <- reactive(input$title)
@@ -184,7 +205,7 @@ server <- function(input, output, session) {
   demographics_score <- reactive(category_mean_score(input$demographic, mean_scores_demographics))
   producers_score <- reactive(category_mean_score(input$producers, mean_scores_producers))
   
-  # make predictions
+  # linear model
   output$lm_pred <- renderText({
     paste0("> Linear Model: ",
            predict(
@@ -203,7 +224,8 @@ server <- function(input, output, session) {
                producers_score = producers_score()
              ))[[1, 1]] %>% round(2))
   })
-
+  
+  # KNN model
   output$knn_pred <- renderText({
     paste0("> KNN Model: ",
            predict(
@@ -222,9 +244,10 @@ server <- function(input, output, session) {
                producers_score = producers_score()
              ))[[1, 1]] %>% round(2))
   })
-
+  
+  # boosted trees
   output$boost_pred <- renderText({
-    paste0("> Boosted Trees Model: ",
+    paste0("> Boosted Trees: ",
            predict(
              boost_final_fit,
              new_data = tibble(
@@ -241,9 +264,10 @@ server <- function(input, output, session) {
                producers_score = producers_score()
              ))[[1, 1]] %>% round(2))
   })
-
+  
+  # random forest
   output$rf_pred <- renderText({
-    paste0("> Random Forest Model: ",
+    paste0("> Random Forest: ",
            predict(
              boost_final_fit,
              new_data = tibble(

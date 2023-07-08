@@ -5,11 +5,8 @@
     - Create interactive plots of actual vs. predicted scores with ggiraph
     - Add dataframes for highest averages
   - 2nd tab: Anime
-    - Randomize new anime using raw data
-  - 3rd tab: Manga
-- Reorganize files
-  - Separate folders for manga and anime
-- Fit regression models for manga scores
+    - Make UI on the right better
+    - Add picture of anime poster
 - Inference
   - Add coefficients plot for linear model
   - Interpret results
