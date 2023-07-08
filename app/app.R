@@ -27,11 +27,14 @@ ui <- fluidPage(
   theme = bs_theme(bootswatch = "minty"),
   
   # title
-  titlePanel("MyAnimeList Score Predictor"),
+  titlePanel(div(span("MyAnimeList Score Predictor"),
+                 style = {"padding-top: 15px;"})),
   
   sidebarLayout(
     # inputs on the left
     sidebarPanel(
+      tags$style(".well {background-color: #f0d0ee;}"),
+      
       textInput("url",
                 "MyAnimeList URL",
                 "https://myanimelist.net/anime/52034/Oshi_no_Ko"),
@@ -111,16 +114,25 @@ ui <- fluidPage(
                      choices = NULL, 
                      multiple = TRUE),
       
+      # inputs take up half of the page
       width = 6
     ),
     
     # outputs on the right
     mainPanel(
-      textOutput("message"),
-      textOutput("lm_pred"),
-      textOutput("knn_pred"),
-      textOutput("boost_pred"),
-      textOutput("rf_pred"),
+      layout_column_wrap(
+        # each output on its own row
+        width = 1,
+        
+        # scores
+        uiOutput("actual_score"),
+        uiOutput("lm_score"),
+        uiOutput("knn_score"),
+        uiOutput("boost_score"),
+        uiOutput("rf_score")
+      ),
+      
+      # outputs take up half of the page
       width = 6
     )
   )
@@ -131,11 +143,11 @@ server <- function(input, output, session) {
   # get inputted URL
   mal_url <- reactive(input$url)
   
+  # retrieve anime details from URL
+  details <- reactive(get_anime_details(mal_url()))
+  
   # detect when the URL changes
-  observeEvent(mal_url(), {
-    # retrieve anime details from URL
-    details <- reactive(get_anime_details(mal_url()))
-    
+  observeEvent(details(), {
     # update inputs using the details
     updateTextInput(session,
                     "title",
@@ -182,9 +194,6 @@ server <- function(input, output, session) {
                          selected = details()$producers)
   })
   
-  # print message
-  output$message <- renderText(paste0(input$title, " has the following predicted scores:"))
-  
   # this is in the server side since there are 1000+ producers
   updateSelectizeInput(session, 
                        "producers",
@@ -205,84 +214,110 @@ server <- function(input, output, session) {
   demographics_score <- reactive(category_mean_score(input$demographic, mean_scores_demographics))
   producers_score <- reactive(category_mean_score(input$producers, mean_scores_producers))
   
-  # linear model
-  output$lm_pred <- renderText({
-    paste0("> Linear regression: ",
-           predict(
-             lm_final_fit,
-             new_data = tibble(
-               title = title(),
-               type = type(),
-               source = anime_source(),
-               members = members(),
-               favorites = favorites(),
-               rating = rating(),
-               genres_score = genres_score(),
-               themes_score = themes_score(),
-               studios_score = studios_score(),
-               demographics_score = demographics_score(),
-               producers_score = producers_score()
-             ))[[1, 1]] %>% round(2))
+  # actual score
+  output$actual_score <- renderUI({
+    value_box(
+      title = "Actual score",
+      value = details()$score,
+      showcase = icon("play", "fa-2x"),
+      theme_color = "info"
+    ) 
   })
   
-  # KNN model
-  output$knn_pred <- renderText({
-    paste0("> K-nearest neighbors: ",
-           predict(
-             knn_final_fit,
-             new_data = tibble(
-               title = title(),
-               type = type(),
-               source = anime_source(),
-               members = members(),
-               favorites = favorites(),
-               rating = rating(),
-               genres_score = genres_score(),
-               themes_score = themes_score(),
-               studios_score = studios_score(),
-               demographics_score = demographics_score(),
-               producers_score = producers_score()
-             ))[[1, 1]] %>% round(2))
+  # linear regression prediction
+  output$lm_score <- renderUI({
+    value_box(
+      title = "Linear regression",
+      value = predict(
+        lm_final_fit,
+        new_data = tibble(
+          title = title(),
+          type = type(),
+          source = anime_source(),
+          members = members(),
+          favorites = favorites(),
+          rating = rating(),
+          genres_score = genres_score(),
+          themes_score = themes_score(),
+          studios_score = studios_score(),
+          demographics_score = demographics_score(),
+          producers_score = producers_score()
+        ))[[1, 1]] %>% round(2),
+      showcase = icon("seedling", "fa-2x"),
+      theme_color = "success"
+    ) 
   })
   
-  # boosted trees
-  output$boost_pred <- renderText({
-    paste0("> Boosted trees: ",
-           predict(
-             boost_final_fit,
-             new_data = tibble(
-               title = title(),
-               type = type(),
-               source = anime_source(),
-               members = members(),
-               favorites = favorites(),
-               rating = rating(),
-               genres_score = genres_score(),
-               themes_score = themes_score(),
-               studios_score = studios_score(),
-               demographics_score = demographics_score(),
-               producers_score = producers_score()
-             ))[[1, 1]] %>% round(2))
+  # KNN prediction
+  output$knn_score <- renderUI({
+    value_box(
+      title = "K-nearest neighbors",
+      value = predict(
+        knn_final_fit,
+        new_data = tibble(
+          title = title(),
+          type = type(),
+          source = anime_source(),
+          members = members(),
+          favorites = favorites(),
+          rating = rating(),
+          genres_score = genres_score(),
+          themes_score = themes_score(),
+          studios_score = studios_score(),
+          demographics_score = demographics_score(),
+          producers_score = producers_score()
+        ))[[1, 1]] %>% round(2),
+      showcase = icon("house", "fa-2x"),
+      theme_color = "info"
+    ) 
   })
   
-  # random forest
-  output$rf_pred <- renderText({
-    paste0("> Random forest: ",
-           predict(
-             boost_final_fit,
-             new_data = tibble(
-               title = title(),
-               type = type(),
-               source = anime_source(),
-               members = members(),
-               favorites = favorites(),
-               rating = rating(),
-               genres_score = genres_score(),
-               themes_score = themes_score(),
-               studios_score = studios_score(),
-               demographics_score = demographics_score(),
-               producers_score = producers_score()
-             ))[[1, 1]] %>% round(2))
+  # boosted trees prediction
+  output$boost_score <- renderUI({
+    value_box(
+      title = "Boosted trees",
+      value = predict(
+        boost_final_fit,
+        new_data = tibble(
+          title = title(),
+          type = type(),
+          source = anime_source(),
+          members = members(),
+          favorites = favorites(),
+          rating = rating(),
+          genres_score = genres_score(),
+          themes_score = themes_score(),
+          studios_score = studios_score(),
+          demographics_score = demographics_score(),
+          producers_score = producers_score()
+        ))[[1, 1]] %>% round(2),
+      showcase = icon("rocket", "fa-2x"),
+      theme_color = "success"
+    ) 
+  })
+  
+  # random forest prediction
+  output$rf_score <- renderUI({
+    value_box(
+      title = "Random forest",
+      value = predict(
+        rf_final_fit,
+        new_data = tibble(
+          title = title(),
+          type = type(),
+          source = anime_source(),
+          members = members(),
+          favorites = favorites(),
+          rating = rating(),
+          genres_score = genres_score(),
+          themes_score = themes_score(),
+          studios_score = studios_score(),
+          demographics_score = demographics_score(),
+          producers_score = producers_score()
+        ))[[1, 1]] %>% round(2),
+      showcase = icon("tree", "fa-2x"),
+      theme_color = "info"
+    ) 
   })
 }
 
