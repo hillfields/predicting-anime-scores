@@ -28,9 +28,22 @@ This interactive Shiny app allows a user to enter a URL for an anime page on [My
 
 ### Visuals
 
-<p align="center" width="100%">
-    <img width="33%" src="images/score_vs_numeric"> 
+<p align="center">
+  <img src="images/score_vs_numeric.png" width="48%">
+&nbsp; &nbsp; &nbsp; &nbsp;
+  <img src="images/score_vs_source.png" width="48%">
 </p>
+
+<p align="center">
+  <img alt="Light" src="images/score_vs_rating.png" width="48%">
+&nbsp; &nbsp; &nbsp; &nbsp;
+  <img alt="Dark" src="images/score_vs_type.png" width="48%">
+</p>
+
+### Numeric variables
+
+- Producers, studios, themes, genres, and demographics with higher average scores also tended to have higher predicted scores
+- The number of members and favorites were each correlated with predicted scores, though the effect of these variables eventually reach a plateau
 
 ### Categorical variables
 
@@ -39,8 +52,3 @@ Category | Lower predicted scores | Higher predicted scores
 Source | web novels, light novels, manga | music, radio
 Type | TV, movie | music, ONA
 Rating | R, PG-13 | Rx (hentai), G
-
-### Numeric variables
-
-- Producers, studios, themes, genres, and demographics with higher average scores also tended to have higher predicted scores
-- The number of members and favorites were each correlated with predicted scores, though the effect of these variables eventually reach a plateau
