@@ -28,17 +28,10 @@ This interactive Shiny app allows a user to enter a URL for an anime page on [My
 
 ### Visuals
 
-<p align="center">
-  <img src="images/score_vs_numeric.png" width="48%">
-&nbsp; &nbsp; &nbsp; &nbsp;
-  <img src="images/score_vs_source.png" width="48%">
-</p>
-
-<p align="center">
-  <img alt="Light" src="images/score_vs_rating.png" width="48%">
-&nbsp; &nbsp; &nbsp; &nbsp;
-  <img alt="Dark" src="images/score_vs_type.png" width="48%">
-</p>
+![](images/score_vs_numeric.png)
+![](images/score_vs_source.png)
+![](images/score_vs_rating.png)
+![](images/score_vs_type.png)
 
 ### Numeric variables
 
