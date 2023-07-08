@@ -7,14 +7,14 @@ This interactive Shiny app allows a user to enter a URL for an anime page on [My
 ## Skills
 
 - Preprocessing data with the **tidyverse**
-- Visualizing data with **ggplot2** (static plots) and **ggiraph** (interactive plots)
+- Visualizing data with **ggplot2**
 - Building machine learning models with **tidymodels**
 - Scraping MAL sites with **rvest**
 - Creating an interactive app with **Shiny**
 
 ## Challenges
 
-- Dealing with variables with multiple labels (mapped them to numeric scores)
+- Dealing with categorical variables that could have multiple labels (mapped them to numeric scores and took the average)
 - Figuring out how to use Shiny (designing the UI, updating inputs based on the URL, organizing functions into separate scripts)
 
 ## Results
@@ -28,20 +28,14 @@ This interactive Shiny app allows a user to enter a URL for an anime page on [My
 
 ### Visuals
 
+#### Inference
+
+![](images/lm_coefs.png)
+![](images/boost_rf_vip.png)
+
+#### Predictions
+
 ![](images/score_vs_numeric.png)
 ![](images/score_vs_source.png)
 ![](images/score_vs_rating.png)
 ![](images/score_vs_type.png)
-
-### Numeric variables
-
-- Producers, studios, themes, genres, and demographics with higher average scores also tended to have higher predicted scores
-- The number of members and favorites were each correlated with predicted scores, though the effect of these variables eventually reach a plateau
-
-### Categorical variables
-
-Category | Lower predicted scores | Higher predicted scores
-:--|:--|:--
-Source | web novels, light novels, manga | music, radio
-Type | TV, movie | music, ONA
-Rating | R, PG-13 | Rx (hentai), G

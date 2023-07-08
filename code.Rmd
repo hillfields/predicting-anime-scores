@@ -423,20 +423,92 @@ augment(lm_final_fit, new_data = anime_test) %>%
 
 # save final model
 save(lm_final_fit, file = "models/lm_fit.rda")
+```
 
+```{r, fig.width=6}
 # get coefficient estimates
-lm_final_fit %>%
-  tidy() %>%
-  mutate(significant = ifelse(p.value < 0.05, "yes", "no"))
-```
+lm_coefs <- lm_final_fit %>%
+  tidy(conf.int = TRUE) %>%
+  mutate(sign = ifelse(estimate >= 0, "positive", "negative"),
+         term = case_when(p.value < 0.001 ~ paste0(term, "***"),
+                          p.value < 0.01 ~ paste0(term, "**"),
+                          p.value < 0.05 ~ paste0(term, "*"),
+                          .default = term))
 
-```{r}
-lm_final_fit %>%
-  tidy() %>%
-  mutate(significant = ifelse(p.value < 0.05, "yes", "no"))
-```
+numeric_coefs <- lm_coefs %>%
+  filter(grepl("members|favorites|_score", term)) %>%
+  ggplot(aes(x = estimate, 
+             y = reorder(term, estimate), 
+             color = sign,
+             xmin = conf.low, 
+             xmax = conf.high, 
+             height = 0)) +
+  geom_point() +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_errorbarh() +
+  labs(x = "Estimate",
+       y = "Value") +
+  scale_color_manual(values = c("#00BA38")) +
+  theme(legend.position = "none")
 
-## Nearest Neighbor
+type_coefs <- lm_coefs %>%
+  filter(grepl("type", term)) %>%
+  mutate(term = sub("type_", "", term)) %>%
+  ggplot(aes(x = estimate, 
+             y = reorder(term, estimate), 
+             color = sign,
+             xmin = conf.low, 
+             xmax = conf.high, 
+             height = 0)) +
+  geom_point() +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_errorbarh() +
+  labs(x = "Estimate",
+       y = "Type") +
+  scale_color_manual(values = c("#F8766D", "#00BA38")) +
+  theme(legend.position = "none")
+
+source_coefs <- lm_coefs %>%
+  filter(grepl("source", term)) %>%
+  mutate(term = sub("source_", "", term)) %>%
+  ggplot(aes(x = estimate, 
+             y = reorder(term, estimate), 
+             color = sign,
+             xmin = conf.low, 
+             xmax = conf.high, 
+             height = 0)) +
+  geom_point() +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_errorbarh() +
+  labs(x = "Estimate",
+       y = "Source") +
+  scale_color_manual(values = c("#F8766D", "#00BA38")) +
+  theme(legend.position = "none")
+
+rating_coefs <- lm_coefs %>%
+  filter(grepl("rating", term)) %>%
+  mutate(term = sub("rating_", "", term),
+         term = sub("r\\.", "r_plus", term)) %>%
+  ggplot(aes(x = estimate, 
+             y = reorder(term, estimate), 
+             color = sign,
+             xmin = conf.low, 
+             xmax = conf.high, 
+             height = 0)) +
+  geom_point() +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_errorbarh() +
+  labs(x = "Estimate",
+       y = "Rating") +
+  scale_color_manual(values = c("#00BA38")) +
+  theme(legend.position = "none")
+
+(numeric_coefs | type_coefs) / (source_coefs | rating_coefs) +
+  plot_annotation(title = "Linear regression: coefficient estimates",
+                  caption = "*, **, and *** indicate the estimate is significant under a p-value of 0.05, 0.01, and 0.001, respectively.")
+``` 
+
+## K-nearest neighbors
 
 ```{r}
 # specify KNN model
@@ -547,9 +619,9 @@ augment(boost_final_fit, new_data = anime_test) %>%
   rmse(truth = score, estimate = .pred)
 
 # variable importance plot
-boost_final_fit %>%
+boost_vip <- boost_final_fit %>%
   extract_fit_parsnip() %>%
-  vip() + 
+  vip(num_features = 15) + 
   labs(title = "Boosted trees: variable importance",
        x = "Predictors",
        y = "Importance")
@@ -604,9 +676,9 @@ augment(rf_final_fit, new_data = anime_test) %>%
   rmse(truth = score, estimate = .pred)
 
 # variable importance plot
-rf_final_fit %>%
+rf_vip <- rf_final_fit %>%
   extract_fit_parsnip() %>%
-  vip() + 
+  vip(num_features = 15) + 
   labs(title = "Random forest: variable importance",
        x = "Predictors",
        y = "Importance")
@@ -617,6 +689,11 @@ save(rf_final_fit, file = "models/rf_fit.rda")
 ```
 
 ## Model predictions
+
+```{r, fig.width=6}
+# combine variable importance plots
+boost_vip + rf_vip
+```
 
 ```{r, message=FALSE, warning=FALSE, fig.width=6}
 # get predictions for each model, then combine into one dataframe
@@ -643,19 +720,14 @@ all_pred %>%
   pivot_longer(cols = c(members, favorites, contains("_score")),
                names_to = "predictor",
                values_to = "predictor_value") %>%
-  pivot_longer(cols = c(.pred, score),
-               names_to = "score_type",
-               values_to = "score_value") %>%
-  mutate(score_type = ifelse(score_type == ".pred", "predicted", "actual")) %>%
-  filter(score_type == "actual") %>%
   ggplot(aes(x = predictor_value,
-             y = score_value)) +
+             y = .pred)) +
   geom_point(alpha = 0.2) +
   geom_smooth() +
   facet_grid(model ~ predictor, scales = "free_x") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
-        axis.title.x = element_blank()) +
-  labs(y = "Predicted score")
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  labs(x = "Value",
+       y = "Predicted score")
 
 # scores by source
 all_pred %>%

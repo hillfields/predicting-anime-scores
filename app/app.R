@@ -207,7 +207,7 @@ server <- function(input, output, session) {
   
   # linear model
   output$lm_pred <- renderText({
-    paste0("> Linear Model: ",
+    paste0("> Linear regression: ",
            predict(
              lm_final_fit,
              new_data = tibble(
@@ -227,7 +227,7 @@ server <- function(input, output, session) {
   
   # KNN model
   output$knn_pred <- renderText({
-    paste0("> KNN Model: ",
+    paste0("> K-nearest neighbors: ",
            predict(
              knn_final_fit,
              new_data = tibble(
@@ -247,7 +247,7 @@ server <- function(input, output, session) {
   
   # boosted trees
   output$boost_pred <- renderText({
-    paste0("> Boosted Trees: ",
+    paste0("> Boosted trees: ",
            predict(
              boost_final_fit,
              new_data = tibble(
@@ -267,7 +267,7 @@ server <- function(input, output, session) {
   
   # random forest
   output$rf_pred <- renderText({
-    paste0("> Random Forest: ",
+    paste0("> Random forest: ",
            predict(
              boost_final_fit,
              new_data = tibble(
